@@ -58,6 +58,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS ad-hoc 签名（免费）：让 bundle 自带一致签名。
+          # 否则 Tauri 默认不签名、二进制只 linker-sign → 下载者收到 Gatekeeper
+          # "已损坏，应移到废纸篓"。设为 "-" 即 ad-hoc，在生成 DMG 前封签，
+          # 下载者首次打开变为"无法验证开发者"（右键→打开即可），不再是"已损坏"。
+          APPLE_SIGNING_IDENTITY: "-"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}

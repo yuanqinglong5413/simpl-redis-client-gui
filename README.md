@@ -106,6 +106,8 @@ npm run tauri build  # 产出 dmg/msi/AppImage 到 src-tauri/target/release/bund
 
 前往 [Releases](../../releases) 下载对应平台的安装包（macOS `.dmg` / Windows `.msi` / Linux `.AppImage`）。若无可用版本，按上方「快速开始」从源码构建。
 
+> **macOS 首次打开**：开源项目未购买 Apple 开发者证书，App 未做公证，Gatekeeper 会提示"无法验证开发者"。**右键 App → 打开** → 确认即可；或在终端执行 `xattr -cr "/Applications/Simple Redis Client GUI.app"` 后双击打开。
+
 ## 测试
 
 ```sh
