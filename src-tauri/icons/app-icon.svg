@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EE4136"/>
+      <stop offset="1" stop-color="#B91F1A"/>
+    </linearGradient>
+  </defs>
+  <!-- 圆角方块底（Redis 红，顶亮底暗微渐变） -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#bg)"/>
+  <!-- 白色数据库圆柱（堆叠存储，呼应 Redis） -->
+  <g>
+    <!-- 侧面 + 前侧底弧 -->
+    <path d="M 252 300 L 252 724 A 260 78 0 0 0 772 724 L 772 300 Z" fill="#FFFFFF"/>
+    <!-- 顶盖椭圆 -->
+    <ellipse cx="512" cy="300" rx="260" ry="78" fill="#FFFFFF"/>
+    <!-- 分层凹槽（暗红，前侧唇，向下凸） -->
+    <path d="M 252 470 A 260 78 0 0 0 772 470" fill="none" stroke="#B41F1A" stroke-width="14" stroke-linecap="round"/>
+    <path d="M 252 597 A 260 78 0 0 0 772 597" fill="none" stroke="#B41F1A" stroke-width="14" stroke-linecap="round"/>
+  </g>
+</svg>

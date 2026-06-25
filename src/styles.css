@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   主题令牌（CSS 通道变量；Tailwind 调色板见 tailwind.config.js）
+   每个 --token 存 "R G B" 三通道，配合 rgb(var(--token) / <alpha>) 使用。
+   语义角色：
+     --c-base     最深底（代码块/输入框/上下文菜单）
+     --c-surface  面板/侧栏底
+     --c-elevated 悬浮/raised/hover
+     --c-line     分隔线 + 选中态背景（需同时胜任两者）
+     --c-faint    极暗文本 + 类型色点 none
+     --c-fg0/1/2/3 主→次→弱→淡 文本
+     --accent     品牌主色（主按钮 / 激活高亮）
+     --danger/-2/-line/-soft  危险：文本/弱文本/边线/软底
+     --info       信息（蓝）
+     --warn/-2/-strong/-line/-soft  警告
+     --success/-2/-strong/-line/-soft 成功
+   ────────────────────────────────────────────────────────────── */
+
+/* 暗色（默认）。值对齐 Tailwind 默认 neutral / red / sky / amber / emerald 调色板。 */
+:root {
+  --c-base: 10 10 10;
+  --c-surface: 23 23 23;
+  --c-elevated: 38 38 38;
+  --c-line: 64 64 64;
+  --c-faint: 82 82 82;
+  --c-fg0: 245 245 245;
+  --c-fg1: 212 212 212;
+  --c-fg2: 163 163 163;
+  --c-fg3: 115 115 115;
+
+  --accent: 220 38 38;
+  --accent-2: 239 68 68;
+  --danger: 248 113 113;
+  --danger-2: 252 165 165;
+  --danger-line: 127 29 29;
+  --danger-soft: 69 10 10;
+
+  --info: 56 189 248;
+
+  --warn: 251 191 36;
+  --warn-2: 252 211 77;
+  --warn-strong: 217 119 6;
+  --warn-line: 120 53 15;
+  --warn-soft: 69 26 3;
+
+  --success: 52 211 153;
+  --success-2: 110 231 183;
+  --success-strong: 16 185 129;
+  --success-line: 6 78 59;
+  --success-soft: 2 44 34;
+
+  color-scheme: dark;
+}
+
+/* 亮色：覆盖以上令牌。底色转白、文本转深、强调色加深以保对比度。 */
+:root[data-theme="light"] {
+  --c-base: 255 255 255;
+  --c-surface: 249 250 251;
+  --c-elevated: 243 244 246;
+  --c-line: 229 231 235;
+  --c-faint: 156 163 175;
+  --c-fg0: 23 23 23;
+  --c-fg1: 64 64 64;
+  --c-fg2: 82 82 82;
+  --c-fg3: 115 115 115;
+
+  --accent: 220 38 38;
+  --accent-2: 239 68 68;
+  --danger: 220 38 38;
+  --danger-2: 239 68 68;
+  --danger-line: 254 202 202;
+  --danger-soft: 254 242 242;
+
+  --info: 2 132 199;
+
+  --warn: 217 119 6;
+  --warn-2: 245 158 11;
+  --warn-strong: 180 83 9;
+  --warn-line: 252 211 77;
+  --warn-soft: 254 243 199;
+
+  --success: 5 150 105;
+  --success-2: 16 185 129;
+  --success-strong: 4 120 87;
+  --success-line: 110 231 183;
+  --success-soft: 209 250 229;
+
+  color-scheme: light;
+}
+
+/* 字号缩放：默认 md=15px；sm/lg 整体 rem 缩放。 */
+:root {
+  font-size: 15px;
+}
+:root[data-font="sm"] {
+  font-size: 14px;
+}
+:root[data-font="lg"] {
+  font-size: 16px;
+}
+
+/* CodeMirror / xterm 这类读不到 Tailwind 类的组件，读这两个变量当底色。 */
+:root {
+  --editor-bg: rgb(var(--c-base));
+}

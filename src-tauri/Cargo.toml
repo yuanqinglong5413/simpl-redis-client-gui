@@ -1,0 +1,31 @@
+[package]
+name = "simple-redis-client-gui"
+description = "Simple Redis Client GUI — Tauri 应用层（命令/窗口），依赖 redis-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+redis-core = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+# 连接密码本地对称加密（AES-256-GCM，固定密钥；见 ADR-002）
+aes-gcm.workspace = true
+sha2.workspace = true
+base64.workspace = true
+# 连接 id 生成
+uuid.workspace = true
+# spawn_blocking（落盘/加解密阻塞调用从 async 命令卸载到线程池）
+tokio.workspace = true
+# SSH 隧道（经堡垒机连内网 Redis；M4b）
+russh.workspace = true
+# russh Handler trait 用 async_trait 宏
+async-trait.workspace = true
+
+[features]
+default = []

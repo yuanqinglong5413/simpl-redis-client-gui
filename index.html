@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple Redis Client GUI</title>
+    <!-- 首屏前应用主题/字号，避免刷新闪一下默认暗色（FOUC）。
+         与 src/theme.ts 用同一 localStorage 键 rc:settings。 -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("rc:settings");
+          var s = raw ? JSON.parse(raw) : {};
+          var theme = s.theme || "system";
+          var resolved =
+            theme === "light" || theme === "dark"
+              ? theme
+              : window.matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+          var d = document.documentElement;
+          d.setAttribute("data-theme", resolved);
+          d.setAttribute("data-font", s.fontScale || "md");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

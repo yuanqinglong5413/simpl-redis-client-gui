@@ -1,0 +1,44 @@
+# Redis GUI Client — Cargo workspace
+#
+# 结构说明见 docs/PRD.md 与 docs/decisions/ADR-001-redis-driver-selection.md
+# redis-core: 纯核心库（不依赖 Tauri，可独立测试）
+# src-tauri:  Tauri 应用外壳（依赖 redis-core + tauri）
+
+[workspace]
+resolver = "2"
+members = ["crates/redis-core", "src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+authors = ["redis-client"]
+repository = ""
+
+# 统一依赖版本管理
+[workspace.dependencies]
+# 内部 crate
+redis-core = { path = "crates/redis-core" }
+
+# 外部依赖
+fred = { version = "10.1", default-features = false }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["serde"] }
+async-trait = "0.1"
+
+# 密码本地对称加密（AES-256-GCM，固定密钥；见 ADR-002）
+aes-gcm = "0.10"
+sha2 = "0.10"
+base64 = "0.22"
+
+# SSH 隧道（纯 Rust，无 libssh2 原生依赖；M4b）
+russh = "0.45"
