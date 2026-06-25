@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use fred::bytes_utils::Str;
 use fred::cmd;
 use fred::prelude::*;
+use fred::types::config::ReconnectPolicy;
 use fred::types::scan::ScanType;
 use fred::types::{ClusterHash, CustomCommand};
-use fred::types::config::ReconnectPolicy;
 use tracing::debug;
 
 use crate::error::AppError;

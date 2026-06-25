@@ -28,7 +28,11 @@ const INTERVAL: Duration = Duration::from_secs(5);
 const DOWN_THRESHOLD: u32 = 3;
 
 /// 为一条连接启动健康探测任务，返回句柄存入 state。
-pub fn spawn(id: String, gw: std::sync::Arc<redis_core::FredGateway>, app: AppHandle) -> HealthHandle {
+pub fn spawn(
+    id: String,
+    gw: std::sync::Arc<redis_core::FredGateway>,
+    app: AppHandle,
+) -> HealthHandle {
     let task = tauri::async_runtime::spawn(async move {
         let mut fails: u32 = 0;
         let mut last = String::from("ok"); // 初始视为 ok（刚连上）
@@ -52,7 +56,11 @@ pub fn spawn(id: String, gw: std::sync::Arc<redis_core::FredGateway>, app: AppHa
                 }
                 Err(_) => {
                     fails = fails.saturating_add(1);
-                    let cur = if fails >= DOWN_THRESHOLD { "down" } else { "reconnecting" };
+                    let cur = if fails >= DOWN_THRESHOLD {
+                        "down"
+                    } else {
+                        "reconnecting"
+                    };
                     if last != cur {
                         last = cur.into();
                         let _ = app.emit(
