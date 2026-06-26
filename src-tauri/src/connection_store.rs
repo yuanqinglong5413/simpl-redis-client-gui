@@ -19,12 +19,14 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use redis_core::AppError;
 use sha2::{Digest, Sha256};
 
-use crate::state::ConnectionConfig;
+use crate::state::{ConnectionConfig, GroupMeta};
 
 /// 配置文件名（非密码字段）。
 const FILENAME: &str = "connections.json";
 /// 加密密码 map 文件名。
 const PW_FILENAME: &str = "passwords.enc";
+/// 分组元数据文件名（独立于 connections.json）。
+const GROUP_FILENAME: &str = "groups.json";
 /// 固定密钥派生种子（见 ADR-002：嵌入二进制，可提取）。
 const KEY_SEED: &[u8] = b"redis-client::cred::v1";
 /// AES-GCM nonce 长度（96 位 = 12 字节）。
@@ -51,6 +53,10 @@ impl ConnectionStore {
         self.dir.join(PW_FILENAME)
     }
 
+    fn group_path(&self) -> PathBuf {
+        self.dir.join(GROUP_FILENAME)
+    }
+
     /// 读取全部连接配置。文件不存在视为空列表。
     /// 返回的配置里 `password` 一律为 `None`（磁盘 JSON 本就不含密码，再显式清空做双保险）。
     pub fn load_all(&self) -> Result<Vec<ConnectionConfig>, AppError> {
@@ -75,6 +81,27 @@ impl ConnectionStore {
         let json = serde_json::to_vec_pretty(configs)
             .map_err(|e| AppError::Parse(format!("序列化连接配置失败: {e}")))?;
         let final_path = self.path();
+        let tmp_path = atomic_tmp(&final_path);
+        std::fs::write(&tmp_path, json)?;
+        std::fs::rename(&tmp_path, &final_path)?;
+        Ok(())
+    }
+
+    /// 读取全部分组元数据。文件不存在视为空列表（默认组由应用层兜底注入，不落盘）。
+    pub fn load_groups(&self) -> Result<Vec<GroupMeta>, AppError> {
+        match std::fs::read(self.group_path()) {
+            Ok(bytes) => serde_json::from_slice(&bytes)
+                .map_err(|e| AppError::Parse(format!("解析 {GROUP_FILENAME} 失败: {e}"))),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(e) => Err(AppError::Io(e)),
+        }
+    }
+
+    /// 全量写入分组元数据（原子写：临时文件 + rename，同 `save_all`）。
+    pub fn save_groups(&self, groups: &[GroupMeta]) -> Result<(), AppError> {
+        let json = serde_json::to_vec_pretty(groups)
+            .map_err(|e| AppError::Parse(format!("序列化分组配置失败: {e}")))?;
+        let final_path = self.group_path();
         let tmp_path = atomic_tmp(&final_path);
         std::fs::write(&tmp_path, json)?;
         std::fs::rename(&tmp_path, &final_path)?;
@@ -163,6 +190,7 @@ fn atomic_tmp(final_path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::GroupEnv;
 
     fn sample(id: &str, pw: Option<&str>) -> ConnectionConfig {
         ConnectionConfig {
@@ -177,6 +205,7 @@ mod tests {
             group: None,
             prefs: Default::default(),
             ssh: None,
+            last_used_at: None,
         }
     }
 
@@ -272,6 +301,48 @@ mod tests {
             Some("pw-two")
         );
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 分组元数据落盘往返。
+    #[test]
+    fn group_round_trip() {
+        let (store, dir) = tmp_store();
+        let groups = vec![GroupMeta {
+            name: "prod".into(),
+            environment: GroupEnv::Prod,
+            order: 1,
+            color: Some("#ef4444".into()),
+            note: None,
+            created_at: 1700000000,
+        }];
+        store.save_groups(&groups).unwrap();
+        let loaded = store.load_groups().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "prod");
+        assert_eq!(loaded[0].environment, GroupEnv::Prod);
+        assert_eq!(loaded[0].color.as_deref(), Some("#ef4444"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn group_missing_file_is_empty() {
+        let (store, dir) = tmp_store();
+        assert!(store.load_groups().unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 旧/手工编辑的 groups.json 缺字段时，靠 `#[serde(default)]` 容错。
+    #[test]
+    fn group_tolerates_missing_fields() {
+        let (store, dir) = tmp_store();
+        std::fs::write(store.group_path(), r#"[{"name":"only-name"}]"#).unwrap();
+        let loaded = store.load_groups().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "only-name");
+        assert_eq!(loaded[0].environment, GroupEnv::Dev);
+        assert_eq!(loaded[0].order, 0);
+        assert_eq!(loaded[0].color, None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

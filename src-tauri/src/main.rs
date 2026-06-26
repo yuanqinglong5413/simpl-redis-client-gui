@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use crate::connection_store::ConnectionStore;
 use crate::ssh_tunnel::{open as open_tunnel, SshAuth, SshTunnelConfig};
-use crate::state::{AppState, ConnectionConfig};
+use crate::state::{AppState, ConnectionConfig, GroupEnv, GroupMeta, DEFAULT_GROUP};
 
 // ========== IPC 健康检查 ==========
 
@@ -314,6 +314,20 @@ async fn connect(
         }
     };
     let info = gw.ping().await?;
+    // 连接成功：更新 last_used_at（侧栏「最近使用置顶」排序用）并落盘。
+    // 失败仅记日志——不应因排序时间戳落盘失败而中断已成功的连接。
+    let now = now_secs();
+    let cfgs_snap = {
+        let mut cfgs = state.configs.lock().await;
+        if let Some(c) = cfgs.iter_mut().find(|c| c.id == id) {
+            c.last_used_at = Some(now);
+        }
+        cfgs.clone()
+    };
+    let store = state.store.clone();
+    if let Err(e) = tokio::task::spawn_blocking(move || store.save_all(&cfgs_snap)).await {
+        eprintln!("[connect] last_used_at 落盘任务失败（已忽略）: {e}");
+    }
     let gw = Arc::new(gw);
     // 启动健康探测任务（周期 ping → conn-health 事件）。
     let hh = health::spawn(id.clone(), gw.clone(), app);
@@ -622,6 +636,181 @@ async fn slowlog(
     get_gateway(&state, &id).await?.slowlog(limit).await
 }
 
+// ========== 分组管理（连接分组元数据 + 移动连接）==========
+
+/// 当前 Unix 秒（仅用于 `last_used_at` / `created_at` 排序，精度到秒足够）。
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// 内存中的默认组（始终存在、不落盘、不可删/改/重命名）。
+fn default_group_meta() -> GroupMeta {
+    GroupMeta {
+        name: DEFAULT_GROUP.to_string(),
+        environment: GroupEnv::Dev,
+        order: 0,
+        color: None,
+        note: None,
+        created_at: 0,
+    }
+}
+
+#[tauri::command]
+async fn list_groups(state: State<'_, AppState>) -> Result<Vec<GroupMeta>, AppError> {
+    let mut g = state.groups.lock().await.clone();
+    // 兜底：保证默认组始终存在（仅内存，不落盘）。
+    if !g.iter().any(|x| x.name == DEFAULT_GROUP) {
+        g.push(default_group_meta());
+    }
+    Ok(g)
+}
+
+/// 新建或更新分组（按 name 定位：已存在则更新元数据，否则新建）。不改 name/created_at。
+#[tauri::command]
+async fn upsert_group(group: GroupMeta, state: State<'_, AppState>) -> Result<(), AppError> {
+    if group.name.is_empty() || group.name == DEFAULT_GROUP {
+        return Err(AppError::Config(format!("非法分组名 '{}'", group.name)));
+    }
+    let snapshot: Vec<GroupMeta> = {
+        let mut g = state.groups.lock().await;
+        if let Some(existing) = g.iter_mut().find(|x| x.name == group.name) {
+            existing.environment = group.environment;
+            existing.order = group.order;
+            existing.color = group.color.clone();
+            existing.note = group.note.clone();
+        } else {
+            let mut new_g = group.clone();
+            if new_g.created_at == 0 {
+                new_g.created_at = now_secs();
+            }
+            g.push(new_g);
+        }
+        g.clone()
+    };
+    let store = state.store.clone();
+    tokio::task::spawn_blocking(move || store.save_groups(&snapshot))
+        .await
+        .map_err(|e| AppError::Other(format!("持久化任务失败: {e}")))??;
+    Ok(())
+}
+
+/// 删除分组：组内连接 `group` 置 None（移到默认组）。返回受影响的全量连接快照供前端回写。
+#[tauri::command]
+async fn delete_group(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ConnectionConfig>, AppError> {
+    if name == DEFAULT_GROUP {
+        return Err(AppError::Config("默认分组不可删除".into()));
+    }
+    let (groups_snap, cfgs_snap): (Vec<GroupMeta>, Vec<ConnectionConfig>) = {
+        let mut g = state.groups.lock().await;
+        if !g.iter().any(|x| x.name == name) {
+            return Err(AppError::Config(format!("分组 '{name}' 不存在")));
+        }
+        g.retain(|x| x.name != name);
+        let groups_snap = g.clone();
+        drop(g);
+        let mut cfgs = state.configs.lock().await;
+        for c in cfgs.iter_mut() {
+            if c.group.as_deref() == Some(name.as_str()) {
+                c.group = None;
+            }
+        }
+        (groups_snap, cfgs.clone())
+    };
+    let cfgs_return = cfgs_snap.clone();
+    let store = state.store.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        store.save_groups(&groups_snap)?;
+        store.save_all(&cfgs_snap)?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("持久化任务失败: {e}")))??;
+    Ok(cfgs_return)
+}
+
+/// 重命名分组：级联改所有引用它的连接。返回受影响的全量连接快照供前端回写。
+#[tauri::command]
+async fn rename_group(
+    from: String,
+    to: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ConnectionConfig>, AppError> {
+    if to.is_empty() || to == DEFAULT_GROUP {
+        return Err(AppError::Config(format!("非法分组名 '{to}'")));
+    }
+    let (groups_snap, cfgs_snap): (Vec<GroupMeta>, Vec<ConnectionConfig>) = {
+        let mut g = state.groups.lock().await;
+        if !g.iter().any(|x| x.name == from) {
+            return Err(AppError::Config(format!("分组 '{from}' 不存在")));
+        }
+        if from != to && g.iter().any(|x| x.name == to) {
+            return Err(AppError::Config(format!("分组名 '{to}' 已存在")));
+        }
+        if let Some(x) = g.iter_mut().find(|x| x.name == from) {
+            x.name = to.clone();
+        }
+        let groups_snap = g.clone();
+        drop(g);
+        let mut cfgs = state.configs.lock().await;
+        for c in cfgs.iter_mut() {
+            if c.group.as_deref() == Some(from.as_str()) {
+                c.group = Some(to.clone());
+            }
+        }
+        (groups_snap, cfgs.clone())
+    };
+    let cfgs_return = cfgs_snap.clone();
+    let store = state.store.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+        store.save_groups(&groups_snap)?;
+        store.save_all(&cfgs_snap)?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("持久化任务失败: {e}")))??;
+    Ok(cfgs_return)
+}
+
+/// 移动连接到指定分组（独立命令，不走 save_connection 以避免触碰密码/SSH 钥匙串逻辑）。
+/// `group = None` 或 `"__default__"` 表示移到默认组（`config.group` 存 `None`）。
+#[tauri::command]
+async fn move_connection(
+    id: String,
+    group: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let normalized: Option<String> = match group.as_deref() {
+        None | Some(DEFAULT_GROUP) => None,
+        Some(g) => {
+            let exists = state.groups.lock().await.iter().any(|x| x.name == g);
+            if !exists {
+                return Err(AppError::Config(format!("分组 '{g}' 不存在")));
+            }
+            Some(g.to_string())
+        }
+    };
+    let snapshot: Vec<ConnectionConfig> = {
+        let mut cfgs = state.configs.lock().await;
+        let c = cfgs
+            .iter_mut()
+            .find(|c| c.id == id)
+            .ok_or_else(|| AppError::Config(format!("连接 {id} 不存在")))?;
+        c.group = normalized;
+        cfgs.clone()
+    };
+    let store = state.store.clone();
+    tokio::task::spawn_blocking(move || store.save_all(&snapshot))
+        .await
+        .map_err(|e| AppError::Other(format!("持久化任务失败: {e}")))??;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -636,7 +825,11 @@ fn main() {
                 eprintln!("[startup] 加载连接配置失败，以空列表启动: {e}");
                 Vec::new()
             });
-            app.manage(AppState::new(store, configs));
+            let groups = store.load_groups().unwrap_or_else(|e| {
+                eprintln!("[startup] 加载分组配置失败，以空列表启动: {e}");
+                Vec::new()
+            });
+            app.manage(AppState::new(store, configs, groups));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -675,6 +868,11 @@ fn main() {
             destroy_group,
             stream_ack,
             stream_pending,
+            list_groups,
+            upsert_group,
+            delete_group,
+            rename_group,
+            move_connection,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");
