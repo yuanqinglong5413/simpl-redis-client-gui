@@ -1,9 +1,11 @@
 // 连接 新建/编辑 模态表单。
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Loader2, Plug, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderPlus, Loader2, Plug, X } from "lucide-react";
 import type { ConnectionConfig, ConnPrefs, ServerInfo, SshTunnelConfig } from "../types";
-import { emptyConnection } from "../types";
+import { DEFAULT_GROUP, emptyConnection } from "../types";
 import { ipc } from "../lib/ipc";
+import { useGroups } from "../hooks/useGroups";
+import { GroupEditDialog } from "./GroupEditDialog";
 import { useT } from "../i18n";
 
 interface Props {
@@ -17,8 +19,13 @@ const inputCls =
 
 export function ConnectionForm({ initial, onSave, onCancel }: Props) {
   const { t } = useT();
+  const { groups } = useGroups();
   const [form, setForm] = useState<ConnectionConfig>(initial ?? emptyConnection());
   const [testing, setTesting] = useState(false);
+  const [newGroupDialog, setNewGroupDialog] = useState(false);
+  // 新建分组用的初始 order（追加到末尾）
+  const groupNewOrder =
+    Math.max(0, ...groups.filter((g) => g.name !== DEFAULT_GROUP).map((g) => g.order)) + 1;
   const [testResult, setTestResult] = useState<ServerInfo | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -103,12 +110,41 @@ export function ConnectionForm({ initial, onSave, onCancel }: Props) {
               />
             </Field>
             <Field label={t("分组")}>
-              <input
-                className={inputCls}
-                value={form.group ?? ""}
-                onChange={(e) => set("group", e.target.value || null)}
-                placeholder={t("默认")}
-              />
+              <div className="flex gap-1.5">
+                <select
+                  className={inputCls}
+                  value={form.group ?? ""}
+                  onChange={(e) => set("group", e.target.value || null)}
+                >
+                  <option value="">{t("默认")}</option>
+                  {groups
+                    .filter((g) => g.name !== DEFAULT_GROUP)
+                    .map((g) => (
+                      <option key={g.name} value={g.name}>
+                        {g.name}
+                        {g.environment === "prod"
+                          ? " · PROD"
+                          : g.environment === "staging"
+                            ? " · STAGING"
+                            : ""}
+                      </option>
+                    ))}
+                  {/* 当前值是列表外的自定义/孤立分组名 → 仍展示，避免选中丢失 */}
+                  {form.group &&
+                    !groups.some((g) => g.name === form.group) &&
+                    form.group !== DEFAULT_GROUP && (
+                      <option value={form.group}>{form.group}</option>
+                    )}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setNewGroupDialog(true)}
+                  title={t("新建分组")}
+                  className="inline-flex shrink-0 items-center rounded-lg border border-neutral-700 px-2 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100"
+                >
+                  <FolderPlus size={15} />
+                </button>
+              </div>
             </Field>
           </div>
 
@@ -378,6 +414,14 @@ export function ConnectionForm({ initial, onSave, onCancel }: Props) {
           </div>
         </div>
       </div>
+      {newGroupDialog && (
+        <GroupEditDialog
+          initial={null}
+          newOrder={groupNewOrder}
+          onCreated={(name) => set("group", name)}
+          onClose={() => setNewGroupDialog(false)}
+        />
+      )}
     </div>
   );
 }
