@@ -24,6 +24,8 @@ interface ConnectionsContextValue {
   /** 活跃连接的实时健康态（来自后端周期 ping → conn-health 事件）。 */
   health: ConnHealth;
   refresh: () => Promise<void>;
+  /** 直接替换内存中的连接列表（供 useGroups 在 rename/delete 后回写后端返回的快照）。 */
+  setConfigs: (next: ConnectionConfig[]) => void;
   save: (config: ConnectionConfig) => Promise<string>;
   remove: (id: string) => Promise<void>;
   connect: (id: string) => Promise<void>;
@@ -157,6 +159,7 @@ export function ConnectionsProvider({ children }: { children: ReactNode }) {
     error,
     health,
     refresh,
+    setConfigs,
     save,
     remove,
     connect,

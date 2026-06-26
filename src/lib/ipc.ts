@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   ConnectionConfig,
+  GroupMeta,
   KeyDetail,
   MemAnalysis,
   PagePos,
@@ -33,6 +34,25 @@ export const ipc = {
     invoke<string>("save_connection", { config }),
 
   deleteConnection: (id: string) => invoke<void>("delete_connection", { id }),
+
+  // ===== 分组管理 =====
+
+  listGroups: () => invoke<GroupMeta[]>("list_groups"),
+
+  /** 新建/更新分组（按 name 定位：已存在则更新元数据，否则新建）。 */
+  upsertGroup: (group: GroupMeta) => invoke<void>("upsert_group", { group }),
+
+  /** 删除分组；返回受影响的全量连接（组内连接已移到默认组）。 */
+  deleteGroup: (name: string) =>
+    invoke<ConnectionConfig[]>("delete_group", { name }),
+
+  /** 重命名分组（级联改连接）；返回受影响的全量连接。 */
+  renameGroup: (from: string, to: string) =>
+    invoke<ConnectionConfig[]>("rename_group", { from, to }),
+
+  /** 移动连接到分组（group=null 或 DEFAULT_GROUP 表示默认组）。 */
+  moveConnection: (id: string, group: string | null) =>
+    invoke<void>("move_connection", { id, group }),
 
   /** 测试连通（不落盘、不查钥匙串，用表单当前密码直连）。 */
   testConnection: (config: ConnectionConfig) =>

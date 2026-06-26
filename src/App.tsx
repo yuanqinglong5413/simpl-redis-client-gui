@@ -1,6 +1,7 @@
 // 应用外壳：左侧栏 + 主区 + 连接表单模态 + 设置模态。
 import { useState } from "react";
 import { ConnectionsProvider, useConnections } from "./hooks/useConnections";
+import { GroupsProvider } from "./hooks/useGroups";
 import { I18nProvider } from "./i18n";
 import { SettingsProvider } from "./settings";
 import { Sidebar } from "./components/Sidebar";
@@ -49,7 +50,9 @@ export default function App() {
     <I18nProvider>
       <SettingsProvider>
         <ConnectionsProvider>
-          <Shell />
+          <GroupsProvider>
+            <Shell />
+          </GroupsProvider>
         </ConnectionsProvider>
       </SettingsProvider>
     </I18nProvider>

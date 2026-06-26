@@ -20,6 +20,25 @@ export interface ConnectionConfig {
   prefs?: ConnPrefs;
   /** SSH 隧道（可选，经堡垒机连内网 Redis）。镜像 Rust SshTunnelConfig。 */
   ssh?: SshTunnelConfig | null;
+  /** 最近一次成功连接的 Unix 秒；侧栏「最近使用置顶」排序用。老连接 = null。 */
+  last_used_at?: number | null;
+}
+
+/** 默认分组内部 key（后端不 i18n）；展示时翻译为「默认 / Default」。镜像 Rust DEFAULT_GROUP。 */
+export const DEFAULT_GROUP = "__default__";
+
+/** 分组环境标识。镜像 Rust GroupEnv（serde 小写）。Prod 触发前端危险操作强确认。 */
+export type GroupEnv = "dev" | "staging" | "prod";
+
+/** 连接分组元数据。连接用 ConnectionConfig.group 名字弱引用，故 name 为唯一键。
+ *  镜像 Rust GroupMeta（字段全 #[serde(default)]）。 */
+export interface GroupMeta {
+  name: string;
+  environment: GroupEnv;
+  order: number;
+  color: string | null;
+  note: string | null;
+  created_at: number;
 }
 
 /**
@@ -77,6 +96,7 @@ export function emptyConnection(): ConnectionConfig {
     tls: false,
     group: null,
     prefs: {},
+    last_used_at: null,
   };
 }
 
