@@ -4,6 +4,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Loader2, PlugZap, RefreshCw } from "lucide-react";
 import { useConnections } from "../hooks/useConnections";
+import { useActiveEnv } from "../lib/env";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useT } from "../i18n";
 import { EmptyState } from "./EmptyState";
@@ -21,6 +22,7 @@ const CliTerminal = lazy(() =>
 export function MainPane() {
   const { configs, activeId, serverInfo, status, error, health, connect, disconnect, db } =
     useConnections();
+  const activeEnv = useActiveEnv();
   const { t } = useT();
   // 当前主标签刷新后保留。
   const [tab, setTab] = useLocalStorage<"keys" | "memory" | "server" | "pubsub" | "cli">(
@@ -41,10 +43,19 @@ export function MainPane() {
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-neutral-950">
       {/* 连接条：纤细的「你在这里」锚点 + 断开/重试 */}
-      <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-2">
+      <div
+        className={`flex items-center justify-between border-b px-4 py-2 ${
+          activeEnv === "prod" ? "border-red-900/60 bg-red-950/20" : "border-neutral-800"
+        }`}
+      >
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-neutral-100">
-            {active.name || t("(未命名)")}
+          <div className="flex items-center gap-1.5 truncate text-sm font-semibold text-neutral-100">
+            <span className="truncate">{active.name || t("(未命名)")}</span>
+            {activeEnv === "prod" && (
+              <span className="shrink-0 rounded bg-red-600/25 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-red-300">
+                PROD
+              </span>
+            )}
           </div>
           <div className="truncate text-xs text-neutral-500">
             {active.host}:{active.port}/{db}
@@ -134,6 +145,7 @@ export function MainPane() {
                 <CliTerminal
                   activeId={active.id}
                   prompt={`${active.host}:${active.port}[${db}]> `}
+                  isProd={activeEnv === "prod"}
                 />
               </Suspense>
             )}

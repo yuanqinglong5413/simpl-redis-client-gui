@@ -256,6 +256,9 @@ const EN: Record<string, string> = {
   "⚠ 即将执行: {raw}": "⚠ About to run: {raw}",
   "输入 yes 确认，其它取消": "Type yes to confirm, anything else cancels",
   已取消: "Cancelled",
+  "⚠ 生产环境": "⚠ Production environment",
+  "⚠ 生产环境！请输入 {cmd} 确认": "⚠ Production! Type {cmd} to confirm",
+  "输入 {x} 确认": "Type {x} to confirm",
 
   // —— Pub/Sub panel ——
   订阅类型: "Subscription type",

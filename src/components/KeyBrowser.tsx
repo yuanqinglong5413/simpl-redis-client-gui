@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useConnections } from "../hooks/useConnections";
+import { useActiveEnv } from "../lib/env";
 import { useKeys } from "../hooks/useKeys";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { useValueTabs } from "../hooks/useValueTabs";
@@ -42,7 +43,7 @@ const SOFT_CAP = 10_000;
 
 type MenuTarget = { kind: "key" | "folder"; path: string };
 type Notice = { text: string; busy?: boolean } | null;
-type Confirm = { title: string; desc: string; danger?: boolean; onOk: () => Promise<void> | void } | null;
+type Confirm = { title: string; desc: string; danger?: boolean; requireText?: string; onOk: () => Promise<void> | void } | null;
 type PromptState = {
   title: string;
   label?: string;
@@ -78,6 +79,20 @@ export function KeyBrowser() {
   const [notice, setNotice] = useState<Notice>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [prompt, setPrompt] = useState<PromptState>(null);
+  const activeEnv = useActiveEnv();
+  const [confirmText, setConfirmText] = useState("");
+  // 生产环境：危险操作加「⚠ 生产环境」前缀 + 要求输入 "prod" 确认；否则原样。
+  const guardedConfirm = useCallback(
+    (c: NonNullable<Confirm>) => {
+      setConfirmText("");
+      if (activeEnv === "prod" && c.danger) {
+        setConfirm({ ...c, desc: `${t("⚠ 生产环境")}\n${c.desc}`, requireText: "prod" });
+      } else {
+        setConfirm(c);
+      }
+    },
+    [activeEnv, t],
+  );
   const noticeTimer = useRef<number | null>(null);
 
   // 列表/值区分隔比例持久化。
@@ -186,7 +201,7 @@ export function KeyBrowser() {
 
   const deleteKeyMenu = useCallback(
     (key: string) => {
-      setConfirm({
+      guardedConfirm({
         title: t("删除 Key"),
         desc: t("确认删除 {key} ？", { key }),
         danger: true,
@@ -204,7 +219,7 @@ export function KeyBrowser() {
         },
       });
     },
-    [activeId, tabs, k, showNotice, t],
+    [activeId, tabs, k, showNotice, t, guardedConfirm],
   );
 
   const deleteDirMenu = useCallback(
@@ -215,7 +230,7 @@ export function KeyBrowser() {
         .patternStats(activeId, prefix)
         .then((s) => {
           setNotice(null);
-          setConfirm({
+          guardedConfirm({
             title: t("删除目录"),
             desc: t("将删除 {count} 个 key（匹配 {prefix}）。此操作不可撤销！", {
               count: s.count,
@@ -236,7 +251,7 @@ export function KeyBrowser() {
         })
         .catch((e) => showNotice(errMsg(e)));
     },
-    [activeId, k, showNotice, t],
+    [activeId, k, showNotice, t, guardedConfirm],
   );
 
   // 重命名 key：弹输入框 → RENAME → 刷新列表、关旧标签。
@@ -608,6 +623,15 @@ export function KeyBrowser() {
             <p className="mt-2 whitespace-pre-wrap break-all text-sm text-neutral-300">
               {confirm.desc}
             </p>
+            {confirm.requireText && (
+              <input
+                className="mt-3 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none focus:border-red-500"
+                placeholder={t("输入 {x} 确认", { x: confirm.requireText })}
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                autoFocus
+              />
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setConfirm(null)}
@@ -621,7 +645,8 @@ export function KeyBrowser() {
                   setConfirm(null);
                   void onOk();
                 }}
-                className="rounded-lg bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-500"
+                disabled={!!confirm.requireText && confirmText.trim() !== confirm.requireText}
+                className="rounded-lg bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t("确认")}
               </button>

@@ -27,9 +27,11 @@ interface Props {
   activeId: string;
   /** redis-cli 风格提示符，如 `127.0.0.1:6379[0]> `。 */
   prompt: string;
+  /** 当前连接是否属生产环境分组：是则危险命令要求复述完整命令而非输入 yes。 */
+  isProd?: boolean;
 }
 
-export function CliTerminal({ activeId, prompt }: Props) {
+export function CliTerminal({ activeId, prompt, isProd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const { t } = useT();
@@ -68,7 +70,7 @@ export function CliTerminal({ activeId, prompt }: Props) {
     let line = "";
     const history: string[] = [];
     let histIdx = -1; // -1 = 当前输入行；0 = 最新一条
-    let pendingDanger: { args: string[] } | null = null;
+    let pendingDanger: { args: string[]; require: string } | null = null;
 
     async function run(args: string[]) {
       try {
@@ -96,9 +98,14 @@ export function CliTerminal({ activeId, prompt }: Props) {
         return;
       }
       if (isDangerous(args)) {
-        pendingDanger = { args };
-        out(`${YELLOW}${t("⚠ 即将执行: {raw}", { raw })}${RESET}`);
-        out(`${YELLOW}${t("输入 yes 确认，其它取消")}${RESET}`);
+        const require = isProd ? args.join(" ").toUpperCase() : "yes";
+        pendingDanger = { args, require };
+        if (isProd) {
+          out(`${YELLOW}${t("⚠ 生产环境！请输入 {cmd} 确认", { cmd: require })}${RESET}`);
+        } else {
+          out(`${YELLOW}${t("⚠ 即将执行: {raw}", { raw })}${RESET}`);
+          out(`${YELLOW}${t("输入 yes 确认，其它取消")}${RESET}`);
+        }
         newPrompt();
         return;
       }
@@ -118,7 +125,11 @@ export function CliTerminal({ activeId, prompt }: Props) {
           term.write("\r\n");
           line = "";
           histIdx = -1;
-          if (ans === "yes" || ans === "y") {
+          const matched =
+            pendingDanger.require === "yes"
+              ? ans === "yes" || ans === "y"
+              : ans === pendingDanger.require.toLowerCase();
+          if (matched) {
             const args = pendingDanger.args;
             pendingDanger = null;
             void run(args);
@@ -196,7 +207,7 @@ export function CliTerminal({ activeId, prompt }: Props) {
       term.dispose();
       termRef.current = null;
     };
-  }, [activeId, prompt, t]);
+  }, [activeId, prompt, t, isProd]);
 
   return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
 }
