@@ -97,10 +97,40 @@ npm run tauri dev    # 前端热重载 + Rust 后端
 ### 打包发布
 
 ```sh
-npm run tauri build  # 产出 dmg/msi/AppImage 到 src-tauri/target/release/bundle
+npm run tauri build  # 本地产出 dmg/msi/AppImage 到 src-tauri/target/release/bundle
 ```
 
-打 tag（`v0.x.y`）也会触发 [Release 工作流](.github/workflows/release.yml)，自动构建三端安装包并发布草稿 Release。
+### 发版（Release）
+
+发布新版本走「改版本号 → 打 tag → CI 自动构建 → publish」四步：
+
+**1. 改版本号**（三处保持一致；子 crate 用 `version.workspace = true` 自动跟随）：
+
+| 文件 | 字段 |
+| --- | --- |
+| `Cargo.toml` | `[workspace.package] version` |
+| `package.json` | `version` |
+| `src-tauri/tauri.conf.json` | `version` |
+
+> `Cargo.lock` 由 `cargo check` 自动更新，无需手改。
+
+**2. 提交 + 打 tag + 推送**：
+
+```sh
+git commit -am "chore(release): bump 0.1.3"
+git tag v0.1.3
+git push origin main --tags
+```
+
+**3. CI 自动构建**：推送 `v*` tag 触发 [Release 工作流](.github/workflows/release.yml)，在 macOS（arm64 + Intel 交叉编译）/ Linux / Windows 四端构建，产物上传为**草稿 Release**（约 10–15 分钟，进度见 [Actions](../../actions) 页）。
+
+**4. 发布**：构建完成后把草稿转为正式发布（也可在 GitHub Releases 页点 *Publish release*）：
+
+```sh
+gh release edit v0.1.3 --notes-file NOTES.md --draft=false   # 带 changelog 发布
+```
+
+> macOS Intel 包在 `macos-14`（arm64）runner 上交叉编译 `x86_64-apple-darwin` —— GitHub 已退役 `macos-13` Intel runner，切勿改回 `macos-13`（会导致 build job 永远排队）。
 
 ## 下载安装
 
